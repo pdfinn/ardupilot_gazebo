@@ -217,6 +217,7 @@
           <udp_port>5600</udp_port>
           <use_basic_pipeline>true</use_basic_pipeline>
           <use_cuda>false</use_cuda>
+          <auto_start>true</auto_start>
         </plugin>
 
       </sensor>

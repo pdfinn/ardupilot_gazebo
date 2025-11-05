@@ -79,6 +79,7 @@ class GstCameraPlugin::Impl {
     pthread_t threadId;
     bool isGstMainLoopActive{false};
     bool requestedStartStreaming{false};
+    bool autoStart{false};
 
     GMainLoop *gst_loop{nullptr};
     GstElement *source{nullptr};
@@ -134,15 +135,31 @@ void GstCameraPlugin::Configure(
         return;
     }
 
-    if (_sdf->HasElement("udp_host"))
+    // Check environment variables first, then fall back to SDF config
+    const char* envHost = std::getenv("GZ_CAMERA_UDP_HOST");
+    if (envHost != nullptr)
+    {
+        impl->udpHost = std::string(envHost);
+        gzmsg << "GstCameraPlugin: using UDP host from environment: "
+              << impl->udpHost << std::endl;
+    }
+    else if (_sdf->HasElement("udp_host"))
     {
         impl->udpHost = _sdf->Get<std::string>("udp_host");
     }
 
-    if (_sdf->HasElement("udp_port"))
+    const char* envPort = std::getenv("GZ_CAMERA_UDP_PORT");
+    if (envPort != nullptr)
+    {
+        impl->udpPort = std::atoi(envPort);
+        gzmsg << "GstCameraPlugin: using UDP port from environment: "
+              << impl->udpPort << std::endl;
+    }
+    else if (_sdf->HasElement("udp_port"))
     {
         impl->udpPort = _sdf->Get<int>("udp_port");
     }
+
     gzmsg << "GstCameraPlugin: streaming video to "
           << impl->udpHost << ":"
           << impl->udpPort << std::endl;
@@ -164,6 +181,16 @@ void GstCameraPlugin::Configure(
     if (_sdf->HasElement("use_cuda"))
     {
         impl->useCuda = _sdf->Get<bool>("use_cuda");
+    }
+
+    // Auto-start streaming on initialization
+    if (_sdf->HasElement("auto_start"))
+    {
+        impl->autoStart = _sdf->Get<bool>("auto_start");
+        if (impl->autoStart)
+        {
+            gzmsg << "GstCameraPlugin: auto-start enabled" << std::endl;
+        }
     }
 
     if (_sdf->HasElement("image_topic"))
@@ -232,6 +259,13 @@ void GstCameraPlugin::PreUpdate(const UpdateInfo &_info,
             &GstCameraPlugin::Impl::OnVideoStreamEnable, impl.get());
 
         impl->is_initialised = true;
+
+        // Auto-start streaming if enabled
+        if (impl->autoStart)
+        {
+            gzmsg << "GstCameraPlugin: auto-starting video stream" << std::endl;
+            impl->requestedStartStreaming = true;
+        }
     }
 
     if (!impl->camera && !impl->cameraName.empty())
