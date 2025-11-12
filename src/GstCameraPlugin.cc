@@ -253,10 +253,27 @@ void GstCameraPlugin::PreUpdate(const UpdateInfo &_info,
               << impl->enableTopic << "]" << std::endl;
 
         // subscribe to gazebo topics
-        impl->node.Subscribe(impl->imageTopic,
+        bool imgSub = impl->node.Subscribe(impl->imageTopic,
             &GstCameraPlugin::Impl::OnImage, impl.get());
-        impl->node.Subscribe(impl->enableTopic,
+        bool enableSub = impl->node.Subscribe(impl->enableTopic,
             &GstCameraPlugin::Impl::OnVideoStreamEnable, impl.get());
+
+        if (!imgSub)
+        {
+            gzerr << "GstCameraPlugin: Failed to subscribe to image topic: "
+                  << impl->imageTopic << std::endl;
+        }
+        else
+        {
+            gzmsg << "GstCameraPlugin: Successfully subscribed to image topic"
+                  << std::endl;
+        }
+
+        if (!enableSub)
+        {
+            gzerr << "GstCameraPlugin: Failed to subscribe to enable topic: "
+                  << impl->enableTopic << std::endl;
+        }
 
         impl->is_initialised = true;
 
@@ -440,15 +457,14 @@ void GstCameraPlugin::Impl::CreateRtmpPipeline(GstElement *pipeline)
 
 void GstCameraPlugin::Impl::CreateGenericPipeline(GstElement *pipeline)
 {
-    gzdbg << "GstCameraPlugin: creating generic pipeline" << std::endl;
+    gzmsg << "GstCameraPlugin: Creating H.264/RTP pipeline -> "
+          << udpHost << ":" << udpPort << std::endl;
+
     GstElement *queue = gst_element_factory_make("queue", nullptr);
     GstElement *converter = gst_element_factory_make("videoconvert", nullptr);
     GstElement *encoder = CreateEncoder();
     GstElement *payloader = gst_element_factory_make("rtph264pay", nullptr);
     GstElement *sink = gst_element_factory_make("udpsink", nullptr);
-
-    g_object_set(G_OBJECT(sink), "host", udpHost.c_str(),
-        "port", udpPort, nullptr);
 
     if (!source || !queue || !converter || !encoder || !payloader || !sink)
     {
@@ -456,6 +472,9 @@ void GstCameraPlugin::Impl::CreateGenericPipeline(GstElement *pipeline)
               << std::endl;
         return;
     }
+
+    g_object_set(G_OBJECT(sink), "host", udpHost.c_str(),
+        "port", udpPort, nullptr);
 
     // Connect all elements to pipeline
     gst_bin_add_many(GST_BIN(pipeline), source, queue, converter, encoder,
@@ -469,6 +488,9 @@ void GstCameraPlugin::Impl::CreateGenericPipeline(GstElement *pipeline)
               << std::endl;
         return;
     }
+
+    gzmsg << "GstCameraPlugin: Pipeline ready (appsrc->queue->videoconvert->x264enc->rtph264pay->udpsink)"
+          << std::endl;
 }
 
 void GstCameraPlugin::Impl::CreateMpeg2tsPipeline(GstElement *pipeline)
@@ -529,6 +551,8 @@ void GstCameraPlugin::Impl::OnImage(const msgs::Image &msg)
     {
         width = msg.width();
         height = msg.height();
+        gzmsg << "GstCameraPlugin: Starting streaming pipeline for "
+              << width << "x" << height << " video" << std::endl;
         StartStreaming();
         requestedStartStreaming = false;
         return;
@@ -552,6 +576,7 @@ void GstCameraPlugin::Impl::OnImage(const msgs::Image &msg)
     if (!gst_buffer_map(buffer, &map, GST_MAP_WRITE))
     {
         gzerr << "GstCameraPlugin: gst_buffer_map failed" << std::endl;
+        gst_buffer_unref(buffer);
         return;
     }
 
@@ -567,11 +592,12 @@ void GstCameraPlugin::Impl::OnImage(const msgs::Image &msg)
 
     GstFlowReturn ret =
         gst_app_src_push_buffer(GST_APP_SRC(this->source), buffer);
+
     if (ret != GST_FLOW_OK)
     {
         // Something wrong, stop pushing
-        gzerr << "GstCameraPlugin: gst_app_src_push_buffer failed"
-              << std::endl;
+        gzerr << "GstCameraPlugin: gst_app_src_push_buffer failed with ret="
+              << ret << std::endl;
         g_main_loop_quit(gst_loop);
     }
 }
