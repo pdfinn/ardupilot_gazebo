@@ -582,6 +582,34 @@ void GstCameraPlugin::Impl::OnVideoStreamEnable(const msgs::Boolean &msg)
           << (msg.data() ? "started" : "stopped")  << std::endl;
     if (msg.data())
     {
+      // Re-read environment variables on enable to handle network changes
+      const char* envHost = std::getenv("GZ_CAMERA_UDP_HOST");
+      if (envHost != nullptr)
+      {
+          std::string newHost = std::string(envHost);
+          if (newHost != udpHost)
+          {
+              gzmsg << "GstCameraPlugin: UDP host changed from "
+                    << udpHost << " to " << newHost << std::endl;
+              udpHost = newHost;
+          }
+      }
+
+      const char* envPort = std::getenv("GZ_CAMERA_UDP_PORT");
+      if (envPort != nullptr)
+      {
+          int newPort = std::atoi(envPort);
+          if (newPort != udpPort)
+          {
+              gzmsg << "GstCameraPlugin: UDP port changed from "
+                    << udpPort << " to " << newPort << std::endl;
+              udpPort = newPort;
+          }
+      }
+
+      gzmsg << "GstCameraPlugin: streaming to "
+            << udpHost << ":" << udpPort << std::endl;
+
       requestedStartStreaming = true;
     }
     else
