@@ -707,4 +707,164 @@ ffmpeg -f v4l2 -i /dev/video0 -vcodec libx264 -preset ultrafast -tune zerolatenc
 
 ---
 
+---
+
+## Automated Testing
+
+### Test Suite Overview
+
+Two complementary test scripts prevent regression:
+
+1. **`test_camera_config.sh`** - Fast configuration tests (no hardware required)
+2. **`test_camera_streaming.sh`** - Full integration tests (requires Gazebo + Android)
+
+### Quick Configuration Test (CI-Friendly)
+
+```bash
+./test_camera_config.sh
+```
+
+**Tests (23 total):**
+- ✅ Plugin source code has env var support
+- ✅ Plugin source code has auto-start support
+- ✅ Plugin source code has dynamic IP refresh
+- ✅ Model SDF has auto_start=true
+- ✅ Model SDF has camera sensor configured
+- ✅ World files include gimbal model
+- ✅ World files have ImageDisplay plugin
+- ✅ Launch scripts export environment variables
+- ✅ GStreamer dependencies available
+- ✅ Documentation files exist
+
+**Runtime:** ~5 seconds
+**Requirements:** None (just checks files and code)
+**Use in:** CI/CD pipelines, pre-commit hooks, quick validation
+
+### Full Integration Test
+
+```bash
+./test_camera_streaming.sh
+```
+
+**Tests (11 total):**
+- ✅ Build artifacts exist (libGstCameraPlugin.dylib)
+- ✅ Android device detected via ADB
+- ✅ Environment variables configured correctly
+- ✅ Gazebo starts successfully
+- ✅ Plugin loads and initializes
+- ✅ Camera topic published by sensor
+- ✅ GStreamer pipeline created and linked
+- ✅ UDP packets transmitted on network (verified via tcpdump)
+- ✅ Packets sent to correct Android IP
+- ✅ ImageDisplay configured in worlds
+- ✅ Model has correct configuration
+
+**Runtime:** ~25 seconds
+**Requirements:** Android device connected via USB on WiFi, sudo access for tcpdump
+**Use in:** Pre-release testing, hardware validation
+
+### Running Tests
+
+**Quick Check (Before Committing):**
+```bash
+./test_camera_config.sh
+```
+
+**Full Verification (Before Releasing):**
+```bash
+# Ensure Android is connected and on WiFi
+adb devices
+
+# Run full test
+./test_camera_streaming.sh
+```
+
+### Expected Output
+
+**All Tests Passing:**
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Camera Streaming Configuration Test
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Plugin Source Code Tests
+✓ Plugin reads GZ_CAMERA_UDP_HOST environment variable
+✓ Plugin reads GZ_CAMERA_UDP_PORT environment variable
+✓ Plugin supports auto_start parameter
+✓ Plugin supports dynamic IP refresh on enable signal
+...
+
+Total: 23  |  Passed: 23  |  Failed: 0
+
+✓ All configuration tests passed!
+```
+
+**Test Failure Example:**
+```
+✗ auto_start=true in gimbal model
+  → Add <auto_start>true</auto_start> to model.sdf
+
+Total: 23  |  Passed: 22  |  Failed: 1
+
+✗ Some tests failed!
+Fix the issues above before deploying camera streaming.
+```
+
+### CI/CD Integration
+
+**GitHub Actions Example:**
+```yaml
+name: Camera Streaming Tests
+
+on: [push, pull_request]
+
+jobs:
+  config-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install GStreamer
+        run: sudo apt-get install -y gstreamer1.0-tools gstreamer1.0-plugins-base
+      - name: Run configuration tests
+        run: ./test_camera_config.sh
+```
+
+**Pre-commit Hook:**
+```bash
+#!/bin/bash
+# .git/hooks/pre-commit
+
+# Run quick config test before allowing commit
+./test_camera_config.sh || {
+    echo "Camera config tests failed! Fix before committing."
+    exit 1
+}
+```
+
+### Regression Testing Checklist
+
+Run these tests after ANY changes to:
+- `src/GstCameraPlugin.cc`
+- `models/gimbal_small_3d/model.sdf`
+- `run_gazebo.sh`
+- `worlds/iris_runway.sdf` or `worlds/iris_warehouse.sdf`
+
+**Quick regression check:**
+```bash
+# 1. Config test (fast)
+./test_camera_config.sh
+
+# 2. Build test
+cd build && make -j4 && cd ..
+
+# 3. Full integration test
+./test_camera_streaming.sh
+```
+
+**If all pass:** Changes are safe to commit ✅
+**If any fail:** Regression detected, fix before merging ❌
+
+---
+
 **End of Guide**
+
