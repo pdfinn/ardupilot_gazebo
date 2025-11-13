@@ -161,17 +161,71 @@ echo ""
 echo -e "${YELLOW}Press Ctrl+C to stop test${NC}"
 echo ""
 
-# Start GStreamer receiver with display
-gst-launch-1.0 -v \
-  udpsrc port=$VIDEO_PORT \
-  ! application/x-rtp,encoding-name=H264 \
-  ! rtph264depay \
-  ! h264parse \
-  ! avdec_h264 \
-  ! videoconvert \
-  ! autovideosink sync=false &
+# Create SDP file to describe the RTP stream
+SDP_FILE="/tmp/gazebo_camera_$$.sdp"
+cat > "$SDP_FILE" << EOF
+v=0
+o=- 0 0 IN IP4 127.0.0.1
+s=Gazebo Camera Stream
+c=IN IP4 127.0.0.1
+t=0 0
+m=video $VIDEO_PORT RTP/AVP 96
+a=rtpmap:96 H264/90000
+a=fmtp:96 packetization-mode=1
+EOF
 
-GSTREAMER_PID=$!
+echo -e "${GREEN}✓ Created SDP file: $SDP_FILE${NC}"
+
+# Try VLC first (best RTP support), then ffplay as fallback
+if command -v /Applications/VLC.app/Contents/MacOS/VLC &> /dev/null; then
+    echo -e "${GREEN}✓ Using VLC for video display${NC}"
+    echo ""
+
+    /Applications/VLC.app/Contents/MacOS/VLC \
+      "$SDP_FILE" \
+      --network-caching=0 \
+      --clock-jitter=0 \
+      --live-caching=0 \
+      --no-video-title-show &
+    GSTREAMER_PID=$!
+
+elif command -v vlc &> /dev/null; then
+    echo -e "${GREEN}✓ Using VLC for video display${NC}"
+    echo ""
+
+    vlc "$SDP_FILE" \
+      --network-caching=0 \
+      --clock-jitter=0 \
+      --live-caching=0 \
+      --no-video-title-show &
+    GSTREAMER_PID=$!
+
+else
+    echo -e "${YELLOW}⚠ VLC not found, trying ffplay...${NC}"
+    echo ""
+
+    if command -v ffplay &> /dev/null; then
+        ffplay -protocol_whitelist file,udp,rtp \
+          -i "$SDP_FILE" \
+          -fflags nobuffer \
+          -flags low_delay \
+          -framedrop \
+          -window_title "Gazebo Camera - ${WORLD_NAME}" \
+          -x 640 -y 480 &
+        GSTREAMER_PID=$!
+    else
+        echo -e "${RED}ERROR: No video player found${NC}"
+        echo ""
+        echo "Install VLC (recommended): brew install --cask vlc"
+        echo "  OR"
+        echo "Install ffmpeg: brew install ffmpeg"
+        rm -f "$SDP_FILE"
+        exit 1
+    fi
+fi
 
 # Wait for user to stop
 wait $GSTREAMER_PID 2>/dev/null || true
+
+# Cleanup SDP file
+rm -f "$SDP_FILE"
