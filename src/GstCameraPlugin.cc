@@ -78,7 +78,7 @@ class GstCameraPlugin::Impl {
 
     pthread_t threadId;
     bool isGstMainLoopActive{false};
-    bool requestedStartStreaming{false};
+    bool requestedStartStreaming{true};
 
     GMainLoop *gst_loop{nullptr};
     GstElement *source{nullptr};
@@ -143,9 +143,19 @@ void GstCameraPlugin::Configure(
     {
         impl->udpPort = _sdf->Get<int>("udp_port");
     }
+
+    // Stream from boot by default: requiring an enable_streaming message
+    // first makes a GCS bench unusable on hosts where gz-transport's
+    // multicast discovery is filtered. Opt out via <enable_streaming>false.
+    if (_sdf->HasElement("enable_streaming"))
+    {
+        impl->requestedStartStreaming = _sdf->Get<bool>("enable_streaming");
+    }
     gzmsg << "GstCameraPlugin: streaming video to "
           << impl->udpHost << ":"
-          << impl->udpPort << std::endl;
+          << impl->udpPort
+          << (impl->requestedStartStreaming ? " (on start)" : " (await enable)")
+          << std::endl;
 
     // uses MPEG2TS pipeline by default. RTMP and Generic are
     // mutually exclusive with priority to RTMP
@@ -413,6 +423,11 @@ void GstCameraPlugin::Impl::CreateGenericPipeline(GstElement *pipeline)
     GstElement *payloader = gst_element_factory_make("rtph264pay", nullptr);
     GstElement *sink = gst_element_factory_make("udpsink", nullptr);
 
+    // config-interval=1: resend SPS/PPS with every IDR. The default (0)
+    // sends them exactly once at stream start, so any receiver that joins
+    // after launch can never decode — late joiners are the normal case for
+    // a GCS attaching to a running sim.
+    g_object_set(G_OBJECT(payloader), "config-interval", 1, nullptr);
     g_object_set(G_OBJECT(sink), "host", udpHost.c_str(),
         "port", udpPort, nullptr);
 

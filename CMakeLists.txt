@@ -85,6 +85,7 @@ endif()
 find_package(RapidJSON REQUIRED)
 find_package(OpenCV REQUIRED)
 
+find_package(PkgConfig REQUIRED)
 pkg_check_modules(GST REQUIRED gstreamer-1.0 gstreamer-app-1.0)
 
 
