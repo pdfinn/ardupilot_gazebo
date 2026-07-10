@@ -328,7 +328,7 @@
            like a real brushless gimbal) and made the AR overlay appear to
            slip against a wobbling picture (nerv-gcs UAS-152 follow-up,
            bench-measured 2026-07-10). -->
-      <p_gain>4</p_gain>
+      <p_gain>8</p_gain>
     </plugin>
     <plugin
       filename="gz-sim-joint-position-controller-system"
@@ -340,7 +340,7 @@
            like a real brushless gimbal) and made the AR overlay appear to
            slip against a wobbling picture (nerv-gcs UAS-152 follow-up,
            bench-measured 2026-07-10). -->
-      <p_gain>4</p_gain>
+      <p_gain>8</p_gain>
     </plugin>
     <plugin
       filename="gz-sim-joint-position-controller-system"
@@ -352,7 +352,7 @@
            like a real brushless gimbal) and made the AR overlay appear to
            slip against a wobbling picture (nerv-gcs UAS-152 follow-up,
            bench-measured 2026-07-10). -->
-      <p_gain>4</p_gain>
+      <p_gain>8</p_gain>
     </plugin>
 
   </model>
