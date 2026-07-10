@@ -323,21 +323,36 @@
       name="gz::sim::systems::JointPositionController">
       <joint_name>gimbal::roll_joint</joint_name>
       <topic>/gimbal/cmd_roll</topic>
-      <p_gain>2</p_gain>
+      <!-- Stiff, damped tracking: p=2 undamped lagged body-attitude
+           disturbances by up to ~16 deg under full-stick inputs (nothing
+           like a real brushless gimbal) and made the AR overlay appear to
+           slip against a wobbling picture (nerv-gcs UAS-152 follow-up,
+           bench-measured 2026-07-10). -->
+      <p_gain>8</p_gain>
     </plugin>
     <plugin
       filename="gz-sim-joint-position-controller-system"
       name="gz::sim::systems::JointPositionController">
       <joint_name>gimbal::pitch_joint</joint_name>
       <topic>/gimbal/cmd_pitch</topic>
-      <p_gain>2</p_gain>
+      <!-- Stiff, damped tracking: p=2 undamped lagged body-attitude
+           disturbances by up to ~16 deg under full-stick inputs (nothing
+           like a real brushless gimbal) and made the AR overlay appear to
+           slip against a wobbling picture (nerv-gcs UAS-152 follow-up,
+           bench-measured 2026-07-10). -->
+      <p_gain>8</p_gain>
     </plugin>
     <plugin
       filename="gz-sim-joint-position-controller-system"
       name="gz::sim::systems::JointPositionController">
       <joint_name>gimbal::yaw_joint</joint_name>
       <topic>/gimbal/cmd_yaw</topic>
-      <p_gain>2</p_gain>
+      <!-- Stiff, damped tracking: p=2 undamped lagged body-attitude
+           disturbances by up to ~16 deg under full-stick inputs (nothing
+           like a real brushless gimbal) and made the AR overlay appear to
+           slip against a wobbling picture (nerv-gcs UAS-152 follow-up,
+           bench-measured 2026-07-10). -->
+      <p_gain>8</p_gain>
     </plugin>
 
   </model>
