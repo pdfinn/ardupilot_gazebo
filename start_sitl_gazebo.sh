@@ -7,8 +7,15 @@
 set -e
 
 # Configuration
-ARDUPILOT_DIR="${ARDUPILOT_DIR:-/Users/pdfinn/github.com/NERVsystems/ardupilot}"
+ARDUPILOT_DIR="${ARDUPILOT_DIR:-$HOME/ardupilot}"
 ANDROID_IP=""
+
+if [ ! -x "$ARDUPILOT_DIR/Tools/autotest/sim_vehicle.py" ]; then
+    echo "ERROR: ArduPilot not found at $ARDUPILOT_DIR" >&2
+    echo "  Set ARDUPILOT_DIR to your ardupilot checkout, e.g.:" >&2
+    echo "    export ARDUPILOT_DIR=\$HOME/src/ardupilot" >&2
+    exit 1
+fi
 
 # Colors
 GREEN='\033[0;32m'
@@ -151,12 +158,25 @@ cd "$ARDUPILOT_DIR"
 echo -e "${GREEN}Starting SITL with Gazebo integration...${NC}"
 echo ""
 
+# MAVLink output for the nerv-uas-kotlin app, which hardcodes UDP 14550
+# (MavlinkUdpConnection.kt): it binds 0.0.0.0:14550 locally and sends its
+# commands to <entered server IP>:14550 — so the user enters THIS Mac's IP.
+#  - udpin:0.0.0.0:14550  → listen on 14550 so the app's commands reach SITL
+#  - udp:<phone>:14550    → also push telemetry to the handset so it appears
+#    immediately, since the app expects telemetry-first (push) per its comments.
+# Skip the push if no real handset (ANDROID_IP=127.0.0.1) — it would feed back
+# into our own udpin listener.
+MAVLINK_OUT="--out=udpin:0.0.0.0:14550"
+if [ -n "$ANDROID_IP" ] && [ "$ANDROID_IP" != "127.0.0.1" ]; then
+    MAVLINK_OUT="--out=udp:${ANDROID_IP}:14550 $MAVLINK_OUT"
+fi
+
 Tools/autotest/sim_vehicle.py \
     -v ArduCopter \
     -f gazebo-iris \
     --model JSON \
     $SHOW_CONSOLE \
     $SHOW_MAP \
-    --out=udp:${ANDROID_IP}:${ANDROID_PORT} \
+    $MAVLINK_OUT \
     --no-rebuild \
     $WIPE_PARAMS

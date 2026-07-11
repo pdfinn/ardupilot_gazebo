@@ -103,3 +103,7 @@ cmake-build-debug
 
 # Catkin custom files
 CATKIN_IGNORE
+
+# macOS local build/run artifacts
+build-ionic/
+log/

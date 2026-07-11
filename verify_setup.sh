@@ -1,101 +1,96 @@
 #!/bin/bash
-# Verify Working Configuration - Run before flight tests
+# Verify build/runtime prerequisites for the ArduPilot Gazebo plugin.
+#
+# Usage:
+#   ARDUPILOT_DIR=/path/to/ardupilot ./verify_setup.sh
+#
+# Defaults: ARDUPILOT_DIR=$HOME/ardupilot, GZ_VERSION=ionic on macOS.
 
-echo "🔍 Checking NERV UAS Gazebo Setup..."
+set -e
+
+REPO_DIR="$(git -C "$(dirname "$0")" rev-parse --show-toplevel 2>/dev/null || cd "$(dirname "$0")" && pwd)"
+ARDUPILOT_DIR="${ARDUPILOT_DIR:-$HOME/ardupilot}"
+EXPECTED_GZ_VERSION="${GZ_VERSION:-ionic}"
+
+echo "Checking ArduPilot Gazebo setup..."
+echo "  Repo:         $REPO_DIR"
+echo "  ArduPilot:    $ARDUPILOT_DIR"
+echo "  GZ_VERSION:   $EXPECTED_GZ_VERSION"
 echo ""
 
 ERRORS=0
+fail() { echo "FAIL: $*"; ERRORS=$((ERRORS + 1)); }
+ok()   { echo "OK:   $*"; }
+warn() { echo "WARN: $*"; }
 
-# Check ArduPilot commit
-cd ~/github.com/NERVsystems/ardupilot
-COMMIT=$(git rev-parse HEAD | cut -c1-7)
-if [ "$COMMIT" != "f622ede" ]; then
-    echo "❌ ArduPilot commit is $COMMIT (expected f622ede)"
-    ERRORS=$((ERRORS + 1))
+# Plugin built
+if [ -f "$REPO_DIR/build/libArduPilotPlugin.dylib" ] || \
+   [ -f "$REPO_DIR/build/libArduPilotPlugin.so" ]; then
+    ok "ArduPilotPlugin built"
 else
-    echo "✅ ArduPilot at working commit (f622ede)"
+    fail "ArduPilotPlugin not built — run: cd build && cmake .. && make -j4"
 fi
 
-# Check ardupilot_gazebo commit
-cd ~/github.com/NERVsystems/ardupilot_gazebo
-COMMIT=$(git rev-parse HEAD | cut -c1-7)
-if [ "$COMMIT" != "2de005a" ]; then
-    echo "❌ ardupilot_gazebo commit is $COMMIT (expected 2de005a)"
-    ERRORS=$((ERRORS + 1))
+# ArduPilot SITL binary
+if [ -x "$ARDUPILOT_DIR/build/sitl/bin/arducopter" ]; then
+    ok "arducopter binary present"
 else
-    echo "✅ ardupilot_gazebo at working commit (2de005a)"
+    fail "arducopter not found at $ARDUPILOT_DIR/build/sitl/bin/arducopter"
 fi
 
-# Check Anaconda libraries NOT present
-ANACONDA_QT=$(ls /opt/anaconda3/lib/libQt5*.dylib 2>/dev/null | wc -l | tr -d ' ')
-if [ "$ANACONDA_QT" != "0" ]; then
-    echo "❌ Anaconda Qt libraries found ($ANACONDA_QT files) - will cause conflicts!"
-    ERRORS=$((ERRORS + 1))
+# sim_vehicle.py
+if [ -x "$ARDUPILOT_DIR/Tools/autotest/sim_vehicle.py" ]; then
+    ok "sim_vehicle.py present"
 else
-    echo "✅ No Anaconda library conflicts"
+    fail "sim_vehicle.py not found in $ARDUPILOT_DIR/Tools/autotest"
 fi
 
-# Check backup exists
-BACKUP_COUNT=$(ls /opt/anaconda3/lib/backup_for_gazebo/ 2>/dev/null | wc -l | tr -d ' ')
-if [ "$BACKUP_COUNT" -lt "400" ]; then
-    echo "⚠️  Warning: Anaconda backup seems incomplete ($BACKUP_COUNT files)"
+# gz on PATH
+if command -v gz >/dev/null 2>&1; then
+    ok "gz on PATH ($(command -v gz))"
 else
-    echo "✅ Anaconda libraries safely backed up ($BACKUP_COUNT files)"
+    fail "gz not on PATH — install Gazebo for $EXPECTED_GZ_VERSION"
 fi
 
-# Check eigen@3 linked
-if readlink /opt/homebrew/include/eigen3/Eigen/Core 2>/dev/null | grep -q "3.4"; then
-    echo "✅ eigen@3 (3.4.1) correctly linked"
-else
-    echo "❌ eigen@3 NOT linked - run: brew link eigen@3 --force"
-    ERRORS=$((ERRORS + 1))
-fi
+# Installed gz-sim major version vs GZ_VERSION
+case "$EXPECTED_GZ_VERSION" in
+    garden)   EXPECTED_MAJOR=7 ;;
+    harmonic) EXPECTED_MAJOR=8 ;;
+    ionic)    EXPECTED_MAJOR=9 ;;
+    jetty)    EXPECTED_MAJOR= ;;
+    *)        warn "Unknown GZ_VERSION=$EXPECTED_GZ_VERSION"; EXPECTED_MAJOR= ;;
+esac
 
-# Check Gazebo packages installed
-for pkg in gz-sim9 gz-physics8 gz-rendering9; do
-    if brew list $pkg &>/dev/null; then
-        echo "✅ $pkg installed"
+if [ -n "$EXPECTED_MAJOR" ] && command -v brew >/dev/null 2>&1; then
+    if brew list "gz-sim$EXPECTED_MAJOR" >/dev/null 2>&1; then
+        ok "gz-sim$EXPECTED_MAJOR installed (matches GZ_VERSION=$EXPECTED_GZ_VERSION)"
     else
-        echo "❌ $pkg NOT installed"
-        ERRORS=$((ERRORS + 1))
-    fi
-done
-
-# Check working binaries backed up
-if [ -f ~/github.com/NERVsystems/ardupilot/build/sitl/bin/arducopter.working.nov5.f622ede ]; then
-    echo "✅ ArduCopter backup exists"
-else
-    echo "⚠️  Warning: No ArduCopter backup found"
-fi
-
-if [ -f ~/github.com/NERVsystems/ardupilot_gazebo/build/libArduPilotPlugin.dylib.working.nov5.2de005a ]; then
-    echo "✅ ArduPilot plugin backup exists"
-else
-    echo "⚠️  Warning: No plugin backup found"
-fi
-
-# Check GZ_VERSION
-if [ -z "$GZ_VERSION" ]; then
-    echo "⚠️  Warning: GZ_VERSION not set - export GZ_VERSION=ionic before building"
-else
-    if [ "$GZ_VERSION" = "ionic" ]; then
-        echo "✅ GZ_VERSION=ionic"
-    else
-        echo "❌ GZ_VERSION=$GZ_VERSION (expected ionic)"
-        ERRORS=$((ERRORS + 1))
+        warn "gz-sim$EXPECTED_MAJOR not installed via Homebrew (may be installed elsewhere)"
     fi
 fi
 
-# Summary
+# Optional: GZ_VERSION env var set in current shell (only relevant for build)
+if [ -z "${GZ_VERSION:-}" ]; then
+    warn "GZ_VERSION not set in environment — required for cmake build"
+fi
+
+# adb (optional, for Android handset path)
+if command -v adb >/dev/null 2>&1; then
+    DEV_COUNT=$(adb devices 2>/dev/null | grep -c "device$" || true)
+    if [ "$DEV_COUNT" -gt 0 ]; then
+        ok "adb sees $DEV_COUNT device(s)"
+    else
+        warn "adb installed but no device connected (fine if not using handset path)"
+    fi
+else
+    warn "adb not on PATH (fine if not using Android handset path)"
+fi
+
 echo ""
 if [ $ERRORS -eq 0 ]; then
-    echo "✅ All checks passed - setup is correct!"
-    echo ""
-    echo "To launch:"
-    echo "  Terminal 1: cd ~/github.com/NERVsystems/ardupilot_gazebo && export GZ_VERSION=ionic && ./run_gazebo.sh"
-    echo "  Terminal 2: cd ~/github.com/NERVsystems/ardupilot_gazebo && ./start_sitl_gazebo.sh"
+    echo "All required checks passed."
     exit 0
 else
-    echo "❌ Found $ERRORS error(s) - review WORKING_CONFIG.md"
+    echo "$ERRORS check(s) failed."
     exit 1
 fi
