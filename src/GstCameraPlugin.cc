@@ -26,6 +26,7 @@
 #include <thread>
 #include <vector>
 
+#include <gz/msgs/sensor.pb.h>
 #include <gz/plugin/Register.hh>
 #include <gz/rendering/Camera.hh>
 #include <gz/rendering/RenderingIface.hh>

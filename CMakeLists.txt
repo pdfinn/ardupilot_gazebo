@@ -91,9 +91,14 @@ pkg_check_modules(GST REQUIRED gstreamer-1.0 gstreamer-app-1.0)
 
 # --------------------------------------------------------------------------- #
 # Find protobuf and abseil (required for macOS)
-find_package(Protobuf CONFIG REQUIRED)
+# CONFIG mode is required for Homebrew protobuf 22+; on Linux the distro
+# protobuf (e.g. 3.12 on Ubuntu 22.04) ships no CMake config, and CONFIG
+# mode can wander into a Conda prefix with an ABI-incompatible protobuf.
 if(APPLE)
+  find_package(Protobuf CONFIG REQUIRED)
   find_package(absl REQUIRED)
+else()
+  find_package(Protobuf REQUIRED)
 endif()
 
 # --------------------------------------------------------------------------- #
